@@ -6,9 +6,13 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 /**
- * An Ely.by login failure that is worth showing to the user verbatim, as opposed to a
- * transport level error that should be reported with its stack trace.
- * Yggdrasil servers reply with an {@code errorMessage} intended for human eyes, we just pass it through.
+ * An Ely.by login failure that is worth showing to the user verbatim, as opposed to a transport
+ * level error that should be reported with its stack trace. Yggdrasil servers reply with an
+ * {@code errorMessage} meant for human eyes, we just pass it through.
+ * <p>
+ * Deliberately unchecked, mirroring {@code PresentedException} in the Microsoft flow: the login
+ * path already throws {@link java.io.IOException} for transport problems, and an unusable
+ * credential is not one of those.
  */
 public class ElyByAuthException extends RuntimeException {
 	@StringRes

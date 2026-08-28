@@ -172,7 +172,7 @@ public class ElyByBackgroundLogin {
 	 */
 	private JSONObject postYggdrasilRequest(String[] relativePaths, JSONObject body) throws IOException {
 		String payload = body.toString();
-		IOException lastException = null;
+		RuntimeException lastError = null;
 		for (int i = 0; i < relativePaths.length; i++) {
 			HttpURLConnection conn = (HttpURLConnection) new URL(AUTH_SERVER_ROOT + relativePaths[i]).openConnection();
 			conn.setConnectTimeout(CONNECT_TIMEOUT);
@@ -200,24 +200,28 @@ public class ElyByBackgroundLogin {
 				}
 			}
 
-			IOException exception = toException(responseCode, responseBody);
+			RuntimeException error = toException(responseCode, responseBody);
 			// Endpoint moved? Try the other documented path before giving up.
 			boolean endpointMissing = responseCode == HttpURLConnection.HTTP_NOT_FOUND
 					|| responseCode == 405 /* METHOD_NOT_FOUND */;
 			if (endpointMissing && i < relativePaths.length - 1) {
 				Log.w(TAG, "Ely.by does not serve " + relativePaths[i] + ", trying the fallback endpoint");
-				lastException = exception;
+				lastError = error;
 				continue;
 			}
-			throw exception;
+			throw error;
 		}
-		// Unreachable unless every candidate path 404'd, in which case the last error is the useful one
-		throw lastException != null ? lastException : new IOException("Ely.by auth server did not answer");
+		// Only reached when every candidate path answered "not found"; keep the last real error
+		throw lastError != null ? lastError : new IllegalStateException("Ely.by auth server did not answer");
 	}
 
-	/** Turns an error response into an exception carrying a message that is worth showing to the user. */
+	/**
+	 * Turns an error response into the exception to report it with. Unchecked, like the
+	 * {@code getResponseThrowable()} helper of the Microsoft flow, so the login code can surface a
+	 * message worth showing to the user without widening every {@code throws} clause.
+	 */
 	@NonNull
-	private IOException toException(int responseCode, String responseBody) {
+	private RuntimeException toException(int responseCode, String responseBody) {
 		String error = null, errorMessage = null;
 		try {
 			JSONObject json = new JSONObject(responseBody);
@@ -235,7 +239,8 @@ public class ElyByBackgroundLogin {
 		}
 		if (errorMessage != null) return new ElyByAuthException(errorMessage, error);
 		if (error != null) return new ElyByAuthException(error, error);
-		return new IOException("Ely.by returned HTTP " + responseCode);
+		// No JSON body at all: a reverse proxy or a gateway most likely, show the status
+		return new ElyByAuthException("Ely.by returned HTTP " + responseCode, null);
 	}
 
 	/** Yggdrasil accepts {@code password:token} for accounts protected by two factor auth. */
