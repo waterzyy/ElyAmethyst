@@ -4,6 +4,13 @@ plugins {
 
 static def getDate() { return new Date().format('yyyyMMdd') }
 
+// The release signing key is the Google Play upload key, and only its password is kept as a
+// repository secret. Forks inherit no secrets, so without a fallback "gradle assembleRelease" dies
+// in packageRelease with a null keystore password. Sign with the committed debug key instead when
+// the secret is absent: a fork can't publish to Play either way, but it can still produce an
+// installable, non-debuggable release APK.
+def playUploadKeystorePassword = System.getenv("GPLAY_KEYSTORE_PASSWORD")
+
 def getVersionName = {
     // Get the last version tag, as well as the short head of the last commit
     String TAG = ""
@@ -86,10 +93,19 @@ android {
             keyPassword "android"
         }
         customRelease {
-            storeFile file("aamc_upload.jks")
-            storePassword System.getenv("GPLAY_KEYSTORE_PASSWORD")
-            keyAlias "android_github_release"
-            keyPassword System.getenv("GPLAY_KEYSTORE_PASSWORD")
+            if (playUploadKeystorePassword) {
+                storeFile file("aamc_upload.jks")
+                storePassword playUploadKeystorePassword
+                keyAlias "android_github_release"
+                keyPassword playUploadKeystorePassword
+            } else {
+                project.logger.warn("GPLAY_KEYSTORE_PASSWORD is not set, signing the release APK with " +
+                        "the debug key instead. Such an APK can not be uploaded to Google Play.")
+                storeFile file("debug.keystore")
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
         }
         googlePlayBuild {
             storeFile file("upload.jks")
