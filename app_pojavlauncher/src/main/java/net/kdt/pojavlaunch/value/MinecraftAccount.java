@@ -5,9 +5,12 @@ import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import net.kdt.pojavlaunch.*;
+import net.kdt.pojavlaunch.authenticator.elyby.ElyByConstants;
 import net.kdt.pojavlaunch.utils.FileUtils;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import com.google.gson.*;
 import android.graphics.Bitmap;
 import android.util.Base64;
@@ -26,6 +29,13 @@ public class MinecraftAccount {
     public String username = "Steve";
     public String selectedVersion = "1.7.10";
     public boolean isMicrosoft = false;
+    /**
+     * Whether this account was obtained from Ely.by's Yggdrasil authentication server.
+     * Such accounts carry a real {@link #accessToken}, but need the game to be pointed at
+     * Ely.by with authlib-injector on launch, see
+     * {@link net.kdt.pojavlaunch.authenticator.elyby.ElyByLaunchHelper}.
+     */
+    public boolean isElyBy = false;
     public String msaRefreshToken = "0";
     public String xuid;
     public long expiresAt;
@@ -45,6 +55,40 @@ public class MinecraftAccount {
         }
     }
 
+    /**
+     * Fetches the head of an Ely.by player. mc-heads.net only knows about Mojang profiles, so
+     * Ely.by skins are pulled from their skin system (Chrly) and the head is cropped out of the
+     * full skin instead.
+     */
+    private void updateElyBySkinFace() {
+        File skinFile = getSkinFaceFile(username);
+        File textureFile = new File(Tools.DIR_CACHE, username + "_elyby_skin.png");
+        try {
+            Tools.downloadFile(ElyByConstants.skinTextureUrl(username), textureFile.getAbsolutePath());
+            Bitmap skin = BitmapFactory.decodeFile(textureFile.getAbsolutePath());
+            if (skin == null) throw new IOException("The Ely.by skin texture could not be decoded");
+            // The head of every Minecraft skin, classic or slim, sits at (8, 0) and is 8x8 pixels
+            Bitmap face = Bitmap.createBitmap(skin, 8, 0, 8, 8);
+            Bitmap scaled = Bitmap.createScaledBitmap(face, 100, 100, false);
+            try (OutputStream os = new FileOutputStream(skinFile)) {
+                scaled.compress(Bitmap.CompressFormat.PNG, 100, os);
+            }
+            mFaceCache = scaled;
+            Log.i("SkinLoader", "Updated the Ely.by skin face of " + username);
+        } catch (IOException | RuntimeException e) {
+            // The player may simply not have a skin uploaded, that is not worth bothering them for
+            Log.w("SkinLoader", "Could not update the Ely.by skin face", e);
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            textureFile.delete();
+        }
+    }
+
+    /**
+     * Offline ("local") accounts have no token at all. They are perfectly usable for single player
+     * and for servers running with online-mode=false, they just can't use anything that requires
+     * Mojang to recognize the player.
+     */
     public boolean isLocal(){
         return accessToken.equals("0") && !username.startsWith("Demo.");
     }
@@ -52,8 +96,21 @@ public class MinecraftAccount {
     public boolean isDemo(){
         return username.startsWith("Demo.");
     }
+
+    /**
+     * @return the UUID an offline (non-authenticated) player is identified by, computed exactly
+     * like the vanilla server does, so that player data stays consistent with other launchers
+     * and with the {@code OfflinePlayer:<name>} entries servers already keep.
+     */
+    public static String getOfflinePlayerUuid(String username) {
+        return UUID.nameUUIDFromBytes(("OfflinePlayer:" + username).getBytes(StandardCharsets.UTF_8)).toString();
+    }
     
     public void updateSkinFace() {
+        if (isElyBy) {
+            updateElyBySkinFace();
+            return;
+        }
         updateSkinFace(profileId);
     }
     

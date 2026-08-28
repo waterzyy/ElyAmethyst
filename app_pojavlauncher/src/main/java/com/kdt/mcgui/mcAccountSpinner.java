@@ -33,6 +33,8 @@ import androidx.core.content.res.ResourcesCompat;
 import net.kdt.pojavlaunch.PojavProfile;
 import net.kdt.pojavlaunch.R;
 import net.kdt.pojavlaunch.Tools;
+import net.kdt.pojavlaunch.authenticator.elyby.ElyByAuthException;
+import net.kdt.pojavlaunch.authenticator.elyby.ElyByBackgroundLogin;
 import net.kdt.pojavlaunch.authenticator.listener.DoneListener;
 import net.kdt.pojavlaunch.authenticator.listener.ErrorListener;
 import net.kdt.pojavlaunch.authenticator.listener.ProgressListener;
@@ -117,6 +119,11 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
             }else {
                 Tools.showError(context, exception.toString(context), exception.getCause());
             }
+        }else if(errorMessage instanceof ElyByAuthException) {
+            // Ely.by sends back a human readable reason (wrong password, 2FA required, ...),
+            // which is much friendlier than the dialog Tools.showError would build out of it
+            ElyByAuthException exception = (ElyByAuthException) errorMessage;
+            Tools.dialog(context, context.getString(R.string.elyby_login_failed), exception.getMessage(context));
         }else {
             Tools.showError(getContext(), errorMessage);
         }
@@ -131,11 +138,26 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
         return false;
     };
 
+    /* Triggered when we need to do Ely.by (Yggdrasil) login */
+    private final ExtraListener<String[]> mElyByLoginListener = (key, value) -> {
+        mLoginBarPaint.setColor(getResources().getColor(R.color.minebutton_color));
+        String username = value[0];
+        String password = value[1];
+        String totpCode = value.length > 2 ? value[2] : null;
+        ElyByBackgroundLogin.withPassword(username, password, totpCode)
+                .performLogin(mProgressListener, mDoneListener, mErrorListener);
+        return false;
+    };
+
     /* Triggered when we need to perform mojang login */
     private final ExtraListener<String[]> mMojangLoginListener = (key, value) -> {
-        if(value[1].isEmpty()){ // Test mode
+        if(value[1].isEmpty()){ // Offline ("local") account: a username is all it takes
             MinecraftAccount account = new MinecraftAccount();
             account.username = value[0];
+            // Minecraft servers running with online-mode=false derive the player identity from the
+            // name alone. Using the same UUID the vanilla server would ("OfflinePlayer:<name>")
+            // keeps player data (inventory, bans, stats) consistent with other launchers.
+            account.profileId = MinecraftAccount.getOfflinePlayerUuid(account.username);
             try {
                 account.save();
             }catch (IOException e){
@@ -161,6 +183,7 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
 
         ExtraCore.addExtraListener(ExtraConstants.MOJANG_LOGIN_TODO, mMojangLoginListener);
         ExtraCore.addExtraListener(ExtraConstants.MICROSOFT_LOGIN_TODO, mMicrosoftLoginListener);
+        ExtraCore.addExtraListener(ExtraConstants.ELYBY_LOGIN_TODO, mElyByLoginListener);
     }
 
 
@@ -292,6 +315,16 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
                         .performLogin(mProgressListener, mDoneListener, mErrorListener);
             }
             return;
+        }
+        if(minecraftAccount.isElyBy){
+            // Ely.by access tokens outlive a game session by a wide margin, but they can still be
+            // rotated or revoked server side, so refresh proactively instead of letting the user
+            // hit "Invalid session" when joining a server. No password is stored, this uses the
+            // accessToken/clientToken pair Yggdrasil gave us at the previous login.
+            if(System.currentTimeMillis() > minecraftAccount.expiresAt){
+                ElyByBackgroundLogin.withTokens(minecraftAccount)
+                        .performLogin(mProgressListener, mDoneListener, mErrorListener);
+            }
         }
     }
 

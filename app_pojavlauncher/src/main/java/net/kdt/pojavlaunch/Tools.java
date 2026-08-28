@@ -56,6 +56,7 @@ import androidx.fragment.app.FragmentActivity;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import net.kdt.pojavlaunch.authenticator.elyby.ElyByLaunchHelper;
 import net.kdt.pojavlaunch.lifecycle.ContextExecutor;
 import net.kdt.pojavlaunch.lifecycle.ContextExecutorTask;
 import net.kdt.pojavlaunch.lifecycle.LifecycleAwareAlertDialog;
@@ -536,6 +537,12 @@ public final class Tools {
         }
         // We use a janky lwjgl setup. We don't want more people complaining it crashes.
         if (hasSodiumMod) javaArgList.add("-Dsodium.checks.issue2561=false");
+
+        // Ely.by accounts authenticate against a third party Yggdrasil server, so the game's authlib
+        // has to be re-pointed at it, or the client would validate the token against Mojang and
+        // refuse to load the player's skins. Needs to be appended before the main class.
+        ElyByLaunchHelper.appendAuthlibInjector(activity, javaArgList, minecraftAccount);
+
         javaArgList.add(versionInfo.mainClass);
         javaArgList.addAll(Arrays.asList(launchArgs));
         // ctx.appendlnToLog("full args: "+javaArgList.toString());

@@ -518,4 +518,18 @@
     <string name="import_modpack_json">Reading modpack info…</string>
     <string name="import_modpack_copy">Copying modpack file to cache… (%s MB/ %s MB)</string>
 
+    <!-- Offline (local) accounts -->
+    <string name="local_login_description">Offline accounts do not need a Minecraft purchase. You can play single player and join servers that have online-mode disabled, but you will not have skins and Mojang-only features stay unavailable.</string>
+
+    <!-- Ely.by accounts -->
+    <string name="elyby_login_title">Ely.by account</string>
+    <string name="elyby_login_description">Signs in at authserver.ely.by. No Minecraft purchase required. Skins and server authentication are provided by authlib-injector, which the launcher installs and enables on launch.</string>
+    <string name="elyby_login_username_hint">Ely.by username or e-mail</string>
+    <string name="elyby_login_password_hint">Password</string>
+    <string name="elyby_login_totp_hint">Two factor code (only if your account uses 2FA)</string>
+    <string name="elyby_login_missing_fields">Both the username and the password have to be filled in.</string>
+    <string name="elyby_login_failed">Ely.by login failed</string>
+    <string name="elyby_2fa_required">This account is protected with two factor authentication. Enter your 6-digit code in the \"Two factor code\" field and log in again.</string>
+    <string name="elyby_agent_missing">authlib-injector could not be downloaded, Ely.by skins and servers will not work this launch. Check your connection or put authlib-injector.jar into the launcher data directory.</string>
+
 </resources>

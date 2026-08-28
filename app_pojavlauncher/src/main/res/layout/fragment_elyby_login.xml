@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Scrollable on purpose: the form is taller than the other login screens, and the soft
+     keyboard plus small landscape screens would otherwise clip the login button. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_app"
+    android:fillViewport="true"
+    android:paddingHorizontal="@dimen/fragment_padding_medium">
+
+    <LinearLayout
+        android:id="@+id/login_menu"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:orientation="vertical"
+        android:background="@drawable/background_card"
+        android:padding="@dimen/_25sdp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/elyby_login_title"
+            android:textSize="@dimen/_16ssp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_4sdp"
+            android:text="@string/elyby_login_description"
+            android:textSize="@dimen/_10ssp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_12sdp"
+            android:text="@string/elyby_login_username_hint" />
+
+        <com.kdt.mcgui.MineEditText
+            android:id="@+id/elyby_login_edit_username"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/_37sdp"
+            android:imeOptions="flagNoExtractUi|actionNext"
+            android:inputType="textEmailAddress"
+            android:maxLines="1"
+            android:textSize="@dimen/_16ssp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:text="@string/elyby_login_password_hint" />
+
+        <com.kdt.mcgui.MineEditText
+            android:id="@+id/elyby_login_edit_password"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/_37sdp"
+            android:imeOptions="flagNoExtractUi|actionNext"
+            android:inputType="textPassword"
+            android:maxLines="1"
+            android:textSize="@dimen/_16ssp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:text="@string/elyby_login_totp_hint" />
+
+        <com.kdt.mcgui.MineEditText
+            android:id="@+id/elyby_login_edit_totp"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/_37sdp"
+            android:imeOptions="flagNoExtractUi|actionDone"
+            android:inputType="number"
+            android:maxLength="6"
+            android:maxLines="1"
+            android:textSize="@dimen/_16ssp" />
+
+        <com.kdt.mcgui.MineButton
+            android:id="@+id/elyby_login_button"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/_42sdp"
+            android:layout_marginTop="@dimen/padding_heavy"
+            android:text="@string/login_online_login_label"
+            android:textColor="@android:color/white" />
+
+    </LinearLayout>
+
+</ScrollView>

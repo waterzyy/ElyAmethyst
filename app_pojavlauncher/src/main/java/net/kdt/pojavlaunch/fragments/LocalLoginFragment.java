@@ -1,7 +1,5 @@
 package net.kdt.pojavlaunch.fragments;
 
-import static net.kdt.pojavlaunch.Tools.hasOnlineProfile;
-
 import android.content.Context;
 import android.os.Bundle;
 import android.view.View;
@@ -20,6 +18,11 @@ import java.io.File;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Offline ("local") account creation: a username is all it takes, no license check and no network
+ * request is performed. The resulting account works for single player and for servers that run with
+ * {@code online-mode=false}; features that need Mojang to recognize the player are still gated.
+ */
 public class LocalLoginFragment extends Fragment {
     public static final String TAG = "LOCAL_LOGIN_FRAGMENT";
 
@@ -33,10 +36,6 @@ public class LocalLoginFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        // This is overkill but meh
-        if (!hasOnlineProfile()){
-            Tools.swapFragment(requireActivity(), MainMenuFragment.class, MainMenuFragment.TAG, null);
-        }
         mUsernameEditText = view.findViewById(R.id.login_edit_email);
         view.findViewById(R.id.login_button).setOnClickListener(v -> {
             if(!checkEditText()) {
@@ -45,6 +44,7 @@ public class LocalLoginFragment extends Fragment {
                 return;
             }
 
+            // An empty password is what tells the account spinner this is an offline account
             ExtraCore.setValue(ExtraConstants.MOJANG_LOGIN_TODO, new String[]{
                     mUsernameEditText.getText().toString(), "" });
 
@@ -53,7 +53,7 @@ public class LocalLoginFragment extends Fragment {
     }
 
 
-    /** @return Whether the mail (and password) text are eligible to make an auth request  */
+    /** @return Whether the username is eligible to create an offline account with */
     private boolean checkEditText(){
 
         String text = mUsernameEditText.getText().toString();

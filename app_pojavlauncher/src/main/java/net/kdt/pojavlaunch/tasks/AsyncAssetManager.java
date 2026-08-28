@@ -17,6 +17,7 @@ import net.kdt.pojavlaunch.R;
 import net.kdt.pojavlaunch.Tools;
 import net.kdt.pojavlaunch.multirt.MultiRTUtils;
 import net.kdt.pojavlaunch.prefs.LauncherPreferences;
+import net.kdt.pojavlaunch.utils.AuthlibInjectorUtils;
 
 import org.apache.commons.io.FileUtils;
 
@@ -104,11 +105,25 @@ public class AsyncAssetManager {
                 unpackComponent(ctx, "arc_dns_injector", true);
                 unpackComponent(ctx, "MioLibPatcher", true);
                 unpackComponent(ctx, "forge_installer", true);
+                unpackAuthlibInjector(ctx);
             } catch (IOException e) {
                 Log.e("AsyncAssetManager", "Failed to unpack components !",e );
             }
             ProgressLayout.clearProgress(ProgressLayout.EXTRACT_COMPONENTS);
         });
+    }
+
+    /**
+     * Unpacks the authlib-injector agent, but only when this build actually ships it: it is an
+     * optional component (it is also downloadable on demand, and Ely.by skins work without it
+     * being part of the APK), so a missing asset must never abort the extraction of anything else.
+     */
+    private static void unpackAuthlibInjector(Context ctx) {
+        try {
+            AuthlibInjectorUtils.unpackBundledJar(ctx);
+        } catch (IOException e) {
+            Log.w("AsyncAssetManager", "Failed to unpack authlib-injector, it will be fetched on first use", e);
+        }
     }
     // Piggybacks off of the java modules extracting later to use their version files for update checks
     // This is indeed prone to breaking.
