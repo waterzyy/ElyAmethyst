@@ -8,9 +8,12 @@ import androidx.annotation.Nullable;
 
 import net.kdt.pojavlaunch.Tools;
 
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -53,6 +56,19 @@ public final class AuthlibInjectorUtils {
 	public static final String DOWNLOAD_URL = "https://github.com/yushijinhun/authlib-injector/releases/download/v"
 			+ VERSION + "/authlib-injector-" + VERSION + ".jar";
 
+	/**
+	 * SHA-256 of the asset behind {@link #DOWNLOAD_URL}, exactly as GitHub publishes it for the
+	 * release. A freshly downloaded agent is a jar the JVM loads with full game privileges, so a
+	 * tampered mirror, a replaced release asset or a hijacked CDN must not be able to reach that:
+	 * the download is thrown away unless it hashes to this value. Update it together with
+	 * {@link #VERSION}.
+	 * <p>
+	 * Not enforced for jars that are already there - unpacked from the APK assets or dropped into
+	 * the component directory by hand. Those are the user's own choice and are still sanity checked
+	 * for being a real agent, see {@link #isUsableAgent(File)}.
+	 */
+	private static final String DOWNLOAD_SHA256 = "9c7f4343e6c82034958ffb48c14a2cb0c85928be7283103ce17da00c6d5a7b10";
+
 	private AuthlibInjectorUtils() {}
 
 	/** @return the directory the agent jar lives in */
@@ -84,6 +100,19 @@ public final class AuthlibInjectorUtils {
 		return null;
 	}
 
+	/**
+	 * @throws IOException if the file does not hash to {@code expectedHex}
+	 */
+	private static void verifySha256(@NonNull File file, @NonNull String expectedHex) throws IOException {
+		final String actual;
+		try (InputStream is = new FileInputStream(file)) {
+			actual = new String(Hex.encodeHex(DigestUtils.sha256(is)));
+		}
+		if (!actual.equalsIgnoreCase(expectedHex)) {
+			throw new IOException(file.getName() + " has SHA-256 " + actual + ", expected " + expectedHex);
+		}
+	}
+
 	/** @return whether an agent jar is already present, no matter its origin */
 	public static boolean isAgentAvailable() {
 		return findAgentJar() != null;
@@ -102,6 +131,15 @@ public final class AuthlibInjectorUtils {
 		FileUtils.ensureParentDirectory(target);
 		Log.i(TAG, "authlib-injector is not installed, downloading " + VERSION);
 		DownloadUtils.downloadFile(DOWNLOAD_URL, target);
+		try {
+			verifySha256(target, DOWNLOAD_SHA256);
+		} catch (IOException | RuntimeException e) {
+			//noinspection ResultOfMethodCallIgnored
+			target.delete();
+			throw new IOException("The downloaded authlib-injector did not match the expected SHA-256, " +
+					"the download was discarded. Check your connection, or place " + JAR_NAME + " into " +
+					getComponentDir().getAbsolutePath() + " manually", e);
+		}
 		if (!isUsableAgent(target)) {
 			//noinspection ResultOfMethodCallIgnored
 			target.delete();
