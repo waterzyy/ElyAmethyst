@@ -1,0 +1,168 @@
+name: Build APK
+
+# Debug APK build for Amethyst / ElyAmethyst (PojavLauncher fork).
+# Kept deliberately close to .github/workflows/android.yml, but it drives the build through the
+# Gradle wrapper, so the Gradle version pinned in gradle/wrapper/gradle-wrapper.properties is the
+# one that runs.
+#
+# What the project actually requires (all verified against the sources in this repo):
+#   * JDK 17                  -> app_pojavlauncher/build.gradle: compileOptions VERSION_1_8,
+#                                AGP 9.x needs JDK 17+ to run (Gradle 9.x too).
+#   * NDK 27.3.13750724       -> app_pojavlauncher/build.gradle: `ndkVersion = "27.3.13750724"`.
+#   * recursive submodules    -> .gitmodules: MobileGlues, SDL, sdl2-compat (C++ sources under
+#                                app_pojavlauncher/src/main/jni) and MioLibPatcher (a Gradle module
+#                                whose :jar task the app depends on).
+#   * native build            -> src/main/jni/Application.mk: 4 ABIs, APP_STL c++_shared,
+#                                APP_PLATFORM android-21.
+#   * debug signing           -> app_pojavlauncher/debug.keystore is committed, so no secrets needed.
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Don't let two pushes to the same ref fight over the runner
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Must match `ndkVersion` in app_pojavlauncher/build.gradle
+  NDK_VERSION: 27.3.13750724
+
+jobs:
+  build:
+    name: Assemble debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # Read by the release/gplay signing configs; assembleDebug uses the committed debug.keystore,
+      # so both are optional here. The fork's own android.yml passes them the same way.
+      GPLAY_KEYSTORE_PASSWORD: ${{ secrets.GPLAY_KEYSTORE_PASSWORD }}
+      # Without it build.gradle falls back to a dummy key and only warns.
+      CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # C++ submodules (MobileGlues / SDL / sdl2-compat) and the MioLibPatcher Gradle module
+          submodules: "recursive"
+          # fetch-depth is left at the default: `git describe --tags` cannot work on a shallow
+          # clone, so app_pojavlauncher/build.gradle falls back to its "amethyst-legacy-<date>-<sha>"
+          # versionName, which is the path written for CI builds.
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # The wrapper distribution checksum is not fetchable/verified from CI here, same as the
+          # repo's existing workflow. The wrapper itself is still what runs the build.
+          validate-wrappers: false
+
+      - name: Make sure the pinned Android NDK is installed
+        run: |
+          set -e
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "::error::ANDROID_HOME is not set, cannot look for the Android SDK"
+            exit 1
+          fi
+          if [ -d "$SDK_ROOT/ndk/$NDK_VERSION" ]; then
+            echo "NDK $NDK_VERSION already present in the runner image"
+            exit 0
+          fi
+          SDKMANAGER=""
+          for candidate in "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+                           "$SDK_ROOT/cmdline-tools/bin/sdkmanager" \
+                           "$SDK_ROOT/tools/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then SDKMANAGER="$candidate"; break; fi
+          done
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::warning::sdkmanager not found under $SDK_ROOT, leaving it to AGP to provision NDK $NDK_VERSION"
+            exit 0
+          fi
+          echo "Installing ndk;$NDK_VERSION with $SDKMANAGER"
+          # Licenses are pre-accepted on GitHub's images; `yes |` covers the rest
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "ndk;$NDK_VERSION"
+          test -d "$SDK_ROOT/ndk/$NDK_VERSION"
+
+      - name: Fetch the bundled JRE 8 (optional)
+        # Not needed for the build to succeed - no Gradle task touches assets/components/jre - but
+        # without it the APK has no internal runtime, so legacy versions can't launch out of the box.
+        # Same artifact the upstream workflow pulls in.
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v9
+        with:
+          workflow: build.yml
+          workflow_conclusion: completed
+          repo: AngelAuraMC/angelauramc-openjdk-build
+          branch: buildjre8
+          name: jre8-pojav
+          path: app_pojavlauncher/src/main/assets/components/jre
+
+      - name: Fetch authlib-injector into the assets (optional)
+        # Ely.by accounts need authlib-injector as a -javaagent. The launcher downloads it on the
+        # device when missing, so bundling it here is only a nicety: shipped APKs then need no
+        # first-launch download for skins / Ely.by server joins.
+        continue-on-error: true
+        run: |
+          set -e
+          AUTHLIB_VERSION=1.2.8
+          DEST=app_pojavlauncher/src/main/assets/components/authlib-injector
+          mkdir -p "$DEST"
+          curl -fL --retry 3 -o "$DEST/authlib-injector.jar" \
+            "https://github.com/yushijinhun/authlib-injector/releases/download/v${AUTHLIB_VERSION}/authlib-injector-${AUTHLIB_VERSION}.jar"
+          echo "Bundled authlib-injector ${AUTHLIB_VERSION}: $(wc -c < "$DEST/authlib-injector.jar") bytes"
+
+      - name: Refresh the language list
+        run: |
+          set -e
+          ./scripts/languagelist_updater.sh
+
+      - name: Build the debug APK
+        run: |
+          set -e
+          chmod +x ./gradlew
+          ./gradlew :app_pojavlauncher:assembleDebug --stacktrace
+
+      - name: Collect the APK
+        id: apk
+        run: |
+          set -e
+          APK="$(ls app_pojavlauncher/build/outputs/apk/debug/*.apk | head -n1)"
+          if [ -z "$APK" ]; then
+            echo "::error::No APK produced, the build did not get as far as packaging"
+            exit 1
+          fi
+          mkdir -p out
+          cp "$APK" out/app-debug.apk
+          ( cd out && md5sum app-debug.apk > app-debug.md5 && sha256sum app-debug.apk > app-debug.sha256 )
+          SIZE="$(du -h out/app-debug.apk | cut -f1)"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$APK")" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Debug APK"
+            echo
+            echo "- Built from \`${GITHUB_REF_NAME}@${GITHUB_SHA::7}\`"
+            echo "- Source APK: \`$(basename "$APK")\` ($SIZE)"
+            echo "- sha256: \`$(cut -d' ' -f1 out/app-debug.sha256)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: |
+            out/app-debug.apk
+            out/app-debug.md5
+            out/app-debug.sha256
+          if-no-files-found: error
+          retention-days: 30
