@@ -94,11 +94,12 @@ jobs:
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "ndk;$NDK_VERSION"
           test -d "$SDK_ROOT/ndk/$NDK_VERSION"
 
-      - name: Fetch the bundled JRE 8 (optional)
-        # Not needed for the build to succeed - no Gradle task touches assets/components/jre - but
-        # without it the APK has no internal runtime, so legacy versions can't launch out of the box.
-        # Same artifact the upstream workflow pulls in.
-        continue-on-error: true
+      - name: Fetch the bundled JRE 8
+        # No Gradle task reads assets/components/jre, so the build itself does not need it, but an
+        # APK without it has no internal runtime: AsyncAssetManager.unpackRuntime() logs "JRE was not
+        # included on this APK" and legacy (Java 8) versions then can't launch out of the box. It is
+        # deliberately not continue-on-error - a 24 MB smaller APK otherwise looks like a good build.
+        # Same artifact the upstream workflow pulls in, so this can not be worse than that.
         uses: dawidd6/action-download-artifact@v9
         with:
           workflow: build.yml
@@ -108,19 +109,39 @@ jobs:
           name: jre8-pojav
           path: app_pojavlauncher/src/main/assets/components/jre
 
+      - name: Verify the bundled JRE 8
+        # The download above can also "succeed" while unpacking nothing useful; these are exactly the
+        # files AsyncAssetManager opens, so if they are here the launcher will install the runtime.
+        run: |
+          set -e
+          JRE=app_pojavlauncher/src/main/assets/components/jre
+          ls -l "$JRE"
+          test -s "$JRE/version"
+          test -s "$JRE/universal.tar.xz"
+          ls "$JRE"/bin-*.tar.xz > /dev/null
+          echo "Internal JRE $(cat "$JRE/version") bundled, $(du -sh "$JRE" | cut -f1) total"
+
       - name: Fetch authlib-injector into the assets (optional)
         # Ely.by accounts need authlib-injector as a -javaagent. The launcher downloads it on the
         # device when missing, so bundling it here is only a nicety: shipped APKs then need no
-        # first-launch download for skins / Ely.by server joins.
-        continue-on-error: true
+        # first-launch download for skins / Ely.by server joins. A failure must be visible though,
+        # hence the report instead of continue-on-error.
         run: |
-          set -e
           AUTHLIB_VERSION=1.2.8
+          # The digest GitHub publishes for that release asset. AuthlibInjectorUtils pins the very
+          # same value, so a build can never bundle a jar the app would then refuse to load.
+          AUTHLIB_SHA256=9c7f4343e6c82034958ffb48c14a2cb0c85928be7283103ce17da00c6d5a7b10
           DEST=app_pojavlauncher/src/main/assets/components/authlib-injector
           mkdir -p "$DEST"
-          curl -fL --retry 3 -o "$DEST/authlib-injector.jar" \
-            "https://github.com/yushijinhun/authlib-injector/releases/download/v${AUTHLIB_VERSION}/authlib-injector-${AUTHLIB_VERSION}.jar"
-          echo "Bundled authlib-injector ${AUTHLIB_VERSION}: $(wc -c < "$DEST/authlib-injector.jar") bytes"
+          if curl -fL --retry 5 -o "$DEST/authlib-injector.jar" \
+            "https://github.com/yushijinhun/authlib-injector/releases/download/v${AUTHLIB_VERSION}/authlib-injector-${AUTHLIB_VERSION}.jar" \
+            && echo "$AUTHLIB_SHA256  $DEST/authlib-injector.jar" | sha256sum --check --status; then
+            echo "Bundled authlib-injector ${AUTHLIB_VERSION}: $(wc -c < "$DEST/authlib-injector.jar") bytes, sha256 matches"
+          else
+            rm -f "$DEST/authlib-injector.jar"
+            echo "::warning::authlib-injector was not bundled (download failed or the checksum did not match), the launcher will download it on the first Ely.by login"
+            echo "⚠️ authlib-injector **not** bundled (fetched on the device instead)" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Refresh the language list
         run: |
@@ -137,7 +158,9 @@ jobs:
         id: apk
         run: |
           set -e
-          APK="$(ls app_pojavlauncher/build/outputs/apk/debug/*.apk | head -n1)"
+          # 2>/dev/null + || true so that the explicit check below is what fails the step, instead of
+          # `ls` aborting the whole step under set -e with an unhelpful "cannot access" message.
+          APK="$(ls app_pojavlauncher/build/outputs/apk/debug/*.apk 2>/dev/null | head -n1 || true)"
           if [ -z "$APK" ]; then
             echo "::error::No APK produced, the build did not get as far as packaging"
             exit 1
@@ -148,11 +171,23 @@ jobs:
           SIZE="$(du -h out/app-debug.apk | cut -f1)"
           echo "size=$SIZE" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$APK")" >> "$GITHUB_OUTPUT"
+          if test -s app_pojavlauncher/src/main/assets/components/jre/universal.tar.xz; then
+            RUNTIME="bundled"
+          else
+            RUNTIME="**not** bundled - install it from the launcher before expecting Java 8 versions to run"
+          fi
+          if test -s app_pojavlauncher/src/main/assets/components/authlib-injector/authlib-injector.jar; then
+            AGENT="bundled"
+          else
+            AGENT="not bundled, downloaded on the first Ely.by login"
+          fi
           {
             echo "### Debug APK"
             echo
             echo "- Built from \`${GITHUB_REF_NAME}@${GITHUB_SHA::7}\`"
             echo "- Source APK: \`$(basename "$APK")\` ($SIZE)"
+            echo "- Internal JRE: $RUNTIME"
+            echo "- authlib-injector (Ely.by): $AGENT"
             echo "- sha256: \`$(cut -d' ' -f1 out/app-debug.sha256)\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
