@@ -177,7 +177,7 @@ public class ElyByBackgroundLogin {
 			HttpURLConnection conn = (HttpURLConnection) new URL(AUTH_SERVER_ROOT + relativePaths[i]).openConnection();
 			conn.setConnectTimeout(CONNECT_TIMEOUT);
 			conn.setReadTimeout(READ_TIMEOUT);
-			setCommonProperties(conn, payload);
+			setCommonProperties(conn);
 			conn.connect();
 			try (OutputStream wr = conn.getOutputStream()) {
 				wr.write(payload.getBytes(StandardCharsets.UTF_8));
@@ -281,11 +281,11 @@ public class ElyByBackgroundLogin {
 	}
 
 	/** All Yggdrasil endpoints are JSON POSTs, so they all get the same treatment. */
-	private static void setCommonProperties(HttpURLConnection conn, String payload) {
-		conn.setRequestProperty("Content-Type", "application/json");
+	private static void setCommonProperties(HttpURLConnection conn) {
+		conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
 		conn.setRequestProperty("Accept", "application/json");
-		conn.setRequestProperty("charset", "utf-8");
-		conn.setRequestProperty("Content-Length", Integer.toString(payload.getBytes(StandardCharsets.UTF_8).length));
+		// No Content-Length here on purpose: the body below is written in full and buffered, so the
+		// connection sets the header itself. Declaring it by hand only adds a way to be wrong.
 		try {
 			conn.setRequestMethod("POST");
 		} catch (java.net.ProtocolException e) {
