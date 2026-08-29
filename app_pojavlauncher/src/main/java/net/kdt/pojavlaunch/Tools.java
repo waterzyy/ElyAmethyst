@@ -1846,6 +1846,39 @@ public final class Tools {
         return false;
     }
 
+    /**
+     * @return whether there is an account the launcher can work with at all: a licensed Microsoft
+     * one, an Ely.by one or an offline one. {@link #hasOnlineProfile()} additionally demands a
+     * Mojang license, which is not a prerequisite for looking at the game folder, downloading a jar
+     * or installing a modpack - those need files and internet, nothing else.
+     */
+    public static boolean hasUsableProfile(){
+        for (MinecraftAccount accountToCheck : getAllProfiles()) {
+            if (!accountToCheck.isDemo()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Counterpart of {@link #hasNoOnlineProfileDialog(Activity, Runnable, String, String)} for the
+     * features offline and Ely.by accounts are supposed to be able to use: it only asks for an
+     * account to exist instead of for a license, and hands {@code run} over when there is one.
+     */
+    public static void hasNoUsableProfileDialog(Activity activity, @Nullable Runnable run){
+        if (hasUsableProfile()) {
+            if (run != null) run.run();
+            return;
+        }
+        dialogOnUiThread(activity, activity.getString(R.string.no_minecraft_account_found),
+                activity.getString(R.string.feature_requires_any_account));
+    }
+
+    public static void hasNoUsableProfileDialog(Activity activity){
+        hasNoUsableProfileDialog(activity, null);
+    }
+
     public static void hasNoOnlineProfileDialog(Activity activity, @Nullable Runnable run, @Nullable String customTitle, @Nullable String customMessage){
         if (hasOnlineProfile() && !Tools.isDemoProfile(activity)){
             if (run != null) { // Demo profile handling should be using customTitle and customMessage

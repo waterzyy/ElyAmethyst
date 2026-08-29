@@ -1,7 +1,7 @@
 package net.kdt.pojavlaunch.fragments;
 
-import static net.kdt.pojavlaunch.Tools.hasNoOnlineProfileDialog;
-import static net.kdt.pojavlaunch.Tools.hasOnlineProfile;
+import static net.kdt.pojavlaunch.Tools.hasNoUsableProfileDialog;
+import static net.kdt.pojavlaunch.Tools.hasUsableProfile;
 
 import android.os.Bundle;
 import android.view.View;
@@ -52,8 +52,9 @@ public class ProfileTypeSelectFragment extends Fragment {
     }
 
     private void tryInstall(Class<? extends Fragment> fragmentClass, String tag){
-        if(!hasOnlineProfile()){
-            hasNoOnlineProfileDialog(requireActivity());
+        // Picking a version type only downloads and writes files, no license involved
+        if(!hasUsableProfile()){
+            hasNoUsableProfileDialog(requireActivity());
         } else {
             Tools.swapFragment(requireActivity(), fragmentClass, tag, null);
         }

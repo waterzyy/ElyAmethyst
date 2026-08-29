@@ -1,7 +1,7 @@
 package net.kdt.pojavlaunch.fragments;
 
-import static net.kdt.pojavlaunch.Tools.hasNoOnlineProfileDialog;
-import static net.kdt.pojavlaunch.Tools.hasOnlineProfile;
+import static net.kdt.pojavlaunch.Tools.hasNoUsableProfileDialog;
+import static net.kdt.pojavlaunch.Tools.hasUsableProfile;
 
 import android.app.Activity;
 import android.os.Bundle;
@@ -47,8 +47,10 @@ public class ModpackCreateFragment extends Fragment {
     }
 
     private void tryInstall(Class<? extends Fragment> fragmentClass, String tag){
-        if(!hasOnlineProfile()){
-            hasNoOnlineProfileDialog(requireActivity());
+        // Installing a modpack is downloading and unpacking files, which an offline or an Ely.by
+        // account is perfectly able to do
+        if(!hasUsableProfile()){
+            hasNoUsableProfileDialog(requireActivity());
         } else {
             Tools.swapFragment(requireActivity(), fragmentClass, tag, null);
         }
