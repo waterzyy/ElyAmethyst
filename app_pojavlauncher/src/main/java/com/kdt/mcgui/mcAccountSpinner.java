@@ -144,6 +144,10 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
         String username = value[0];
         String password = value[1];
         String totpCode = value.length > 2 ? value[2] : null;
+        // ExtraCore keeps the last value of a key around, and this one is a raw password. Drop it
+        // as soon as the request got it: nothing reads the key afterwards, and the process may keep
+        // running for days. Same for the listener's own copy once we return.
+        ExtraCore.removeValue(key);
         ElyByBackgroundLogin.withPassword(username, password, totpCode)
                 .performLogin(mProgressListener, mDoneListener, mErrorListener);
         return false;
